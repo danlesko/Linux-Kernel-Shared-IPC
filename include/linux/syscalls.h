@@ -889,4 +889,24 @@ asmlinkage long sys_membarrier(int cmd, int flags);
 
 asmlinkage long sys_mlock2(unsigned long start, size_t len, int flags);
 
+/* Syscalls for CMSC 421 Project 1 */
+
+asmlinkage long create_mbox_421(unsigned long id, int enable_crypt, int lifo);
+
+asmlinkage long remove_mbox_421(unsigned long id);
+
+asmlinkage void count_mbox_421(void);
+
+asmlinkage long list_mbox_421(unsigned long *mbxes, long k);
+
+asmlinkage long send_msg_421(unsigned long id, unsigned char *msg, long n, unsigned long key);
+
+asmlinkage long recv_msg_421(unsigned long id, unsigned char *msg, long n, unsigned long key);
+
+asmlinkage long peek_msg_421(unsigned long id, unsigned char *msg, long n, unsigned long key);
+
+asmlinkage long count_msg_421(unsigned long id);
+
+asmlinkage long len_msg_421(unsigned long id);
+
 #endif

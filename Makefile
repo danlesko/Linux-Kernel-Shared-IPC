@@ -1,8 +1,8 @@
 VERSION = 4
 PATCHLEVEL = 4
 SUBLEVEL = 1
-EXTRAVERSION =
-NAME = Blurry Fish Butt
+EXTRAVERSION = -cmsc421project1-dale2
+NAME = dale2_project1
 
 # *DOCUMENTATION*
 # To see a list of typical targets execute "make help"
@@ -879,7 +879,7 @@ export mod_sign_cmd
 
 
 ifeq ($(KBUILD_EXTMOD),)
-core-y		+= kernel/ certs/ mm/ fs/ ipc/ security/ crypto/ block/
+core-y		+= kernel/ certs/ mm/ fs/ ipc/ security/ crypto/ block/ msg421/
 
 vmlinux-dirs	:= $(patsubst %/,%,$(filter %/, $(init-y) $(init-m) \
 		     $(core-y) $(core-m) $(drivers-y) $(drivers-m) \
