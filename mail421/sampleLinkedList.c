@@ -47,6 +47,7 @@ void cleanup_module() {
     printk(KERN_INFO "kernel module unloaded.n");
     printk(KERN_INFO "deleting the list using list_for_each_entry_safe()n");
     list_for_each_entry_safe(aPerson, tmp, &personList.list, list){
+        
          printk(KERN_INFO "freeing node %sn", aPerson->name);
          list_del(&aPerson->list);
          kfree(aPerson);
