@@ -10,8 +10,6 @@
 // Creation of msg node in linked list
 struct msg_421 {
     char* msg;
-    //long n;
-    //unsigned long key;
 
     struct list_head list;
 
@@ -37,9 +35,42 @@ long bitXOR(long x, long y){
     return x ^ y;
 }
 
+// works as intended
+// memory is freed correctly as well
+// function done
+void convertArray(char * msg, unsigned long key){
+    int newN = strlen(msg);
+    int i = 0;
+    int leftover;
+
+    long * byteArray = kmalloc(newN, GFP_KERNEL);
+    memcpy(byteArray, msg, newN);
+    //byteArray = (long *)msg;
+
+    printk("In convertArray printing message1: \n%s\n", msg);
+
+    if(newN % 4 != 0){
+        leftover = 4 - newN % 4;
+        newN += leftover;
+    }
+
+    for (i = 0; i<(newN/sizeof(long)); i++){
+        byteArray[i] = bitXOR(byteArray[i], key);
+    }
+
+    memcpy(msg, byteArray, newN);
+    //msg = (char *)byteArray;
+    printk("In convertArray printing message2: \n%s\n", msg);
+
+    
+    kfree(byteArray);
+
+}
+
 // create a new dynamically created mailbox
 // syscall 377
 // works as intended thus far
+// returns error of ID already in use, otherwise returns 0
 asmlinkage long create_mbox_421(unsigned long id, int enable_crypt, int lifo) {
 
     struct mbox_421 *aNewMailbox, *aMailbox, *tmp;
@@ -51,6 +82,8 @@ asmlinkage long create_mbox_421(unsigned long id, int enable_crypt, int lifo) {
             printk("Mailbox already exists with that ID! Please try a different ID\n");
 
             up_write(&lock);
+
+            // We already have a mailbox by that id, return error
             return EADDRINUSE;
         }
     }
@@ -71,10 +104,12 @@ asmlinkage long create_mbox_421(unsigned long id, int enable_crypt, int lifo) {
 
 // syscall 378
 // works as intended thus far
+// if there are messages still in the mailbox, return error
 asmlinkage long remove_mbox_421(unsigned long id){
 
     struct mbox_421 *aMailbox, *tmp;
     struct msg_421 *aMsg, *tmpMsg;
+    int counter = 0;
 
     down_write(&lock);
 
@@ -83,16 +118,24 @@ asmlinkage long remove_mbox_421(unsigned long id){
     list_for_each_entry_safe(aMailbox, tmp, &mbox_421_list, list){
         if (aMailbox->id == id){
             list_for_each_entry_safe(aMsg, tmpMsg, &aMailbox->msgList.list, list){
-                printk("Freeing msgs...\n");
-                list_del(&aMsg->list);
-                kfree(aMsg);
+
+                if(counter >= 1){
+                    up_write(&lock);
+                    return EPERM;
+                }
+
+                // printk("Freeing msgs...\n");
+                // list_del(&aMsg->list);
+                // kfree(aMsg);
             }
             printk("Freeing node %ld \n", aMailbox->id);
             list_del(&aMailbox->list);
             kfree(aMailbox);
+
         }
     }
 
+    // return normally
     up_write(&lock);
     return 0;
 }
@@ -134,8 +177,14 @@ asmlinkage long list_mbox_421(unsigned long *mbxes, long k){
         counter += 1;
     }
 
+    
     up_read(&lock);
-    return 0;
+    if (counter > 0){
+        return counter;
+    }
+
+    // if no mboxes found return error
+    return ENOENT;
 }
 
 // syscall 381
@@ -173,6 +222,9 @@ asmlinkage long send_msg_421(unsigned long id, unsigned char *msg, long n, unsig
                 printk("Message received...printing the message: \n");
                 printk(aNewMsg->msg);
                 printk("\n");
+                if(aMailbox->enable_crypt == 1){
+                    convertArray(aNewMsg->msg,key);
+                }
             }
 
             if (aMailbox->lifo == 0){
@@ -187,7 +239,8 @@ asmlinkage long send_msg_421(unsigned long id, unsigned char *msg, long n, unsig
     }
 
     up_write(&lock);
-    return 1;
+    // no such mailbox found
+    return ENOENT;
     
 }
 
@@ -205,7 +258,12 @@ asmlinkage long recv_msg_421(unsigned long id, unsigned char *msg, long n, unsig
             list_for_each_entry_safe(aMsg, tmpMsg, &aMailbox->msgList.list, list){
                 //msg = "Does this work>";
                 //strncpy(msg, "Lol?", n);
+                if(aMailbox->enable_crypt == 1){
+                    convertArray(aMsg->msg,key);
+                }
+
                 cpyToUserCheck = copy_to_user(msg, aMsg->msg, n);
+
                 if (cpyToUserCheck == -EFAULT){
                     printk("Copying from kernel space failed!");
                     up_write(&lock);
@@ -218,7 +276,9 @@ asmlinkage long recv_msg_421(unsigned long id, unsigned char *msg, long n, unsig
             }
         }
     }
+
     up_write(&lock);
+    // even if no bytes are returned, return 0 because function exited successfully
     return 0;
 }
 
@@ -237,17 +297,28 @@ asmlinkage long peek_msg_421(unsigned long id, unsigned char *msg, long n, unsig
             list_for_each_entry_safe(aMsg, tmpMsg, &aMailbox->msgList.list, list){
                 //msg = "Does this work>";
                 //strncpy(msg, "Lol?", n);
+                if(aMailbox->enable_crypt == 1){
+                    convertArray(aMsg->msg,key);
+                }
                 cpyToUserCheck = copy_to_user(msg, aMsg->msg, n);
                 if (cpyToUserCheck == -EFAULT){
                     printk("Copying from kernel space failed!");
+                    if(aMailbox->enable_crypt == 1){
+                        convertArray(aMsg->msg,key);
+                    }
                     up_read(&lock);
                     return EFAULT;
+                }
+                if(aMailbox->enable_crypt == 1){
+                    convertArray(aMsg->msg,key);
                 }
                 break;
             }
         }
     }
+    
     up_read(&lock);
+    // even if no bytes are returned, return 0 because function exited successfully
     return 0;
 }
 
@@ -271,10 +342,16 @@ asmlinkage long count_msg_421(unsigned long id) {
     }
 
     up_read(&lock);
-    return countMsg;
+    if (countMsg > 0){
+        return countMsg;
+    }
+
+    // if no messages found return error
+    return ENOENT;
 }
 
 // syscall 385
+// works as intended
 asmlinkage long len_msg_421(unsigned long id) {
     struct mbox_421 *aMailbox, *tmp;
     struct msg_421 *aMsg, *tmpMsg;
@@ -294,6 +371,7 @@ asmlinkage long len_msg_421(unsigned long id) {
         }
     }
     up_read(&lock);
-    return 1;
+    // return that there is no message
+    return ENOENT;
 }
 

@@ -48,40 +48,45 @@ long recv_msg_syscall(unsigned long id, unsigned char *msg, long n, unsigned lon
 }
 
 int main(int argc, char* argv[]){
-	create_mbox_syscall(4, 0, 0);
-	create_mbox_syscall(2, 0, 0);
-	create_mbox_syscall(3, 0, 0);
-	create_mbox_syscall(4, 0, 0);
+	create_mbox_syscall(4, 1, 0);
+	//create_mbox_syscall(2, 0, 0);
+	//create_mbox_syscall(3, 0, 0);
+	//create_mbox_syscall(4, 0, 0);
 
 
-	unsigned long *mbxes;
-	long k = 10;
-	mbxes = malloc(k * sizeof(unsigned long));
+	// unsigned long *mbxes;
+	// long k = 10;
+	// mbxes = malloc(k * sizeof(unsigned long));
 
-	list_mbox_syscall(mbxes, k);
+	// list_mbox_syscall(mbxes, k);
 
-	int i = 0;
-	for (i = 0; i< k; i++){
-		printf("ID Found: %ld \n", mbxes[i]);
-	}
+	// int i = 0;
+	// for (i = 0; i< k; i++){
+	// 	printf("ID Found: %ld \n", mbxes[i]);
+	// }
 	
 	// count_mbox_syscall();
 
-	//char * msg1 = "Test Message1";
-	// char * msg2 = "Test Message2";
-	//long stringLength = strlen(msg1);
-	//unsigned long someKey = 22;
+	char * msg1 = "Hows it going yall?";
+	char * msg2 = "Does this work?";
+	long stringLength = strlen(msg1);
+	unsigned long someKey = 22;
 
-	// send_msg_syscall(4, msg1, stringLength, someKey);
-	// send_msg_syscall(4, msg2, stringLength, someKey);
+	send_msg_syscall(4, msg1, stringLength, someKey);
+	send_msg_syscall(4, msg2, stringLength, someKey);
 
 
-	//char * oldMsg = malloc(stringLength+1 * sizeof(char));
+	char * oldMsg = malloc(stringLength+1 * sizeof(char));
 
-	//recv_msg_syscall(4, oldMsg, stringLength, someKey);
+	recv_msg_syscall(4, oldMsg, stringLength, 22);
 
-	//printf(oldMsg);
-	//printf("\n");
+	printf(oldMsg);
+	printf("\n");
+
+	recv_msg_syscall(4, oldMsg, stringLength, 22);
+
+	printf(oldMsg);
+	printf("\n");
 
 	//recv_msg_syscall(4, oldMsg, stringLength, someKey);
 
