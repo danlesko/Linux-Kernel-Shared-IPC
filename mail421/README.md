@@ -1,8 +1,12 @@
 # Asynchronous Message Passing
 
-This project required us to come up with a way to create mailboxes and allow processes to send and receive messages to and from those mailboxes. To implement this in kernel space, I decided to make use of a linked list of linked lists. The first list would be the mailbox layer, with messages added to the given mailbox in the form of a list as well. In order to allow for messages to be stored in either a stack or queue (LIFO or FIFO), I made use the doubly linked list library <linux/list.h> in order to make my life a bit easier. This library allows you to add nodes to either the beginning or the end of an existing list, so creating the mailboxes as either stacks or queues was trivial. 
+### Overview
 
-The requirements for this project included defining a couple key functionalities for our mailboxes:
+This project required us to come up with a way to create mailboxes and allow processes to send and receive messages to and from those mailboxes. To implement this in kernel space, I decided to make use of a linked list of linked lists. The first list would be the mailbox layer, with messages added to the given mailbox in the form of a list as well. In order to allow for messages to be stored in either a stack or queue (LIFO or FIFO), I made use the doubly linked list library <linux/list.h> in order to make my life a bit easier. This library allows you to add nodes to either the beginning or the end of an existing list, so creating the mailboxes as either stacks or queues was trivial. Various examples were pulled from different sources in order to implement the lists correctly. The class also posted questions on a group forum, Piazza, in order to better assist one another. 
+
+
+### Core Functionality
+The requirements for this project included defining a couple key functions for our mailboxes and messages:
 1) `long create_mbox_421(unsigned long id, int enable_crypt, int lifo)`: creates a new empty mailbox with ID id, if it does not already exist, and returns 0. The queue should be flagged for encryption if the enable_crypt option is set to anything other than 0. If enable_crypt is set to zero, then the key parameter in any functions including it should be ignored. The lifo parameter controls what direction the messages are retrieved in. If this parameter is 0, then the messages should be stored/retrieved in FIFO order (as a queue). If it is non-zero, then the messages should be stored in LIFO order (as a stack).
 2) `long remove_mbox_421(unsigned long id)`: removes mailbox with ID id, if it is empty, and returns 0. If the mailbox is not empty, this system call should return an appropriate error and not remove the mailbox.
 3) `long count_mbox_421(void)`: returns the number of existing mailboxes.
@@ -12,3 +16,7 @@ The requirements for this project included defining a couple key functionalities
 7) `long peek_msg_421(unsigned long id, unsigned char *msg, long n, unsigned long key)`: performs the same operation as recv_msg_421() without removing the message from the mailbox.
 8) `long count_msg_421(unsigned long id)`: returns the number of messages in the mailbox id on success or an appropriate error code on failure.
 9) `long len_msg_421(unsigned long id)`: returns the lenth of the next message that would be returned by calling recv_msg_421() with the same id value (that is the number of bytes in the next message in the mailbox). If there are no messages in the mailbox, this should return an appropriate error value.
+
+### Return Values
+
+### References
