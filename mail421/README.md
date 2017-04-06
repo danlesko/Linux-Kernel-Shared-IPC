@@ -1,7 +1,6 @@
-# Asynchronous Message Passing
+# Asynchronous Message Passing In Linux Kernel
 
 ### Overview
-
 This project required us to come up with a way to create mailboxes and allow processes to send and receive messages to and from those mailboxes. To implement this in kernel space, I decided to make use of a linked list of linked lists. The first list would be the mailbox layer, with messages added to the given mailbox in the form of a list as well. In order to allow for messages to be stored in either a stack or queue (LIFO or FIFO), I made use the doubly linked list library <linux/list.h> in order to make my life a bit easier. This library allows you to add nodes to either the beginning or the end of an existing list, so creating the mailboxes as either stacks or queues was trivial. Various examples were pulled from different sources in order to implement the lists correctly. The class also posted questions on a group forum, Piazza, in order to better assist one another. 
 
 
@@ -18,5 +17,30 @@ The requirements for this project included defining a couple key functions for o
 9) `long len_msg_421(unsigned long id)`: returns the lenth of the next message that would be returned by calling recv_msg_421() with the same id value (that is the number of bytes in the next message in the mailbox). If there are no messages in the mailbox, this should return an appropriate error value.
 
 ### Return Values
+Throughout the project, various return values were needed to indicate success or error. If a success occurred, a nonnegative integer would be returned. For errors, we would return a specific error code outlined in <linux/errno.h>. There are used as such:
+1) `EPERM` : Error sent back if user was not root
+2) `EADDRINUSE` : Error sent back if a mailbox of a given ID has already been created
+3) `EACCES` : Error sent back if an operation was not allowed, such as deleting a mailbox with messages still inside
+4) `ENOENT` : Error sent back if a mailbox was not found
+5) `EFAULT` : Error sent back if a NULL pointer was passed
+6) `ENOBUFS` : Error sent back if message is of a negative length
+
+### Locks
+I wished to use a reader writer lock in my kernel program. The implementation I found was the Reader/Writer Semaphore which I was hinted at by Professor Sebald. This type of lock allows programs to read messages / count messages and mailboxes by as many processes as needed, but locks the entire structure down whenever a create or remove method is called by a process. This allows for safe handling of mailboxes and methods and prevents any overflow or pointer errors by preventing processes from creating / destroying when others are reading.
+
+### Privileges
+This capability was also fairly simple to implement. I found the linux function `capable()` to be quite handy as it allows a given function to determine who was the caller. When used correctly, we can return from the function if an user has the incorrect privileges.
+
+### XOR Cipher
+I have 2 additional functions in my file, one called bitXOR and one called convertArray. convertArray takes in msg, converts it to a byteArray, XORS the bits, and casts byteArray back to msg as a character array. When sending a message, I take in the message, and pass it to my convertArray function before storing it. For methods like peek message, I first call convertArray to unencrypt the stored msg, copy it, and then re-encrypt. While this method might not be the best option as the message is temporarily unencrypted, it is unencrypted in kernel space for a brief period in time before re-encrypting.
 
 ### References
+- Class lectures
+- Class slides
+- Class Piazza
+- http://www.makelinux.net/ldd3/chp-5-sect-3 (read / write semaphores)
+- http://www.makelinux.net/ldd3/chp-6-sect-1 (capable function)
+- http://www.makelinux.net/ldd3/chp-11-sect-5 (linked list)
+- http://www.roman10.net/2011/07/28/linux-kernel-programminglinked-list/ (linked list)
+- http://www.fsl.cs.sunysb.edu/kernel-api/re256.html (copy_to_user)
+- http://www.fsl.cs.sunysb.edu/kernel-api/re257.html (copy_from_user)
