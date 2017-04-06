@@ -35,9 +35,7 @@ long bitXOR(long x, long y){
     return x ^ y;
 }
 
-// works as intended
-// memory is freed correctly as well
-// function done
+// Function takes in msg, copies it to an array of bytes and does XOR operation, and then copies it back to msg
 void convertArray(char * msg, unsigned long key){
     int newN = strlen(msg);
     int i = 0;
@@ -45,7 +43,6 @@ void convertArray(char * msg, unsigned long key){
 
     long * byteArray = kmalloc(newN, GFP_KERNEL);
     memcpy(byteArray, msg, newN);
-    //byteArray = (long *)msg;
 
     printk("In convertArray printing message1: \n%s\n", msg);
 
@@ -59,21 +56,27 @@ void convertArray(char * msg, unsigned long key){
     }
 
     memcpy(msg, byteArray, newN);
-    //msg = (char *)byteArray;
     printk("In convertArray printing message2: \n%s\n", msg);
-
     
     kfree(byteArray);
 
 }
 
-// create a new dynamically created mailbox
-// syscall 377
-// works as intended thus far
-// returns error of ID already in use, otherwise returns 0
+// Syscall 377
+// Creates a new empty mailbox with ID id, if it does not already exist, and returns 0.
+// The queue should be flagged for encryption if the enable_crypt option is set to anything other than 0.
+// If enable_crypt is set to zero, then the key parameter in any functions including it should be ignored.
+// The lifo parameter controls what direction the messages are retrieved in. If this parameter is 0, then the messages should be stored/retrieved in FIFO order (as a queue).
+// If it is non-zero, then the messages should be stored in LIFO order (as a stack).
 asmlinkage long create_mbox_421(unsigned long id, int enable_crypt, int lifo) {
 
     struct mbox_421 *aNewMailbox, *aMailbox, *tmp;
+
+    // checks to see if user is root
+    if(!capable(CAP_SYS_ADMIN)){
+        printk("You must be root to do that!\n");
+        return -EPERM;
+    }
 
     down_write(&lock);
 
@@ -84,7 +87,7 @@ asmlinkage long create_mbox_421(unsigned long id, int enable_crypt, int lifo) {
             up_write(&lock);
 
             // We already have a mailbox by that id, return error
-            return EADDRINUSE;
+            return -EADDRINUSE;
         }
     }
 
@@ -102,28 +105,36 @@ asmlinkage long create_mbox_421(unsigned long id, int enable_crypt, int lifo) {
     return 0;
 }
 
-// syscall 378
-// works as intended thus far
-// if there are messages still in the mailbox, return error
+// Syscall 378
+// Removes mailbox with ID id, if it is empty, and returns 0. 
+// If the mailbox is not empty, this system call should return an appropriate error and not remove the mailbox.
 asmlinkage long remove_mbox_421(unsigned long id){
 
     struct mbox_421 *aMailbox, *tmp;
     struct msg_421 *aMsg, *tmpMsg;
     int counter = 0;
 
+    // checks to see if user is root
+    if(!capable(CAP_SYS_ADMIN)){
+        printk("You must be root to do that!");
+        return -EPERM;
+    }
+
     down_write(&lock);
 
-    //printk(KERN_INFO "kernel module unloaded.n");
     printk("Deleting the list using list_for_each_entry_safe\n");
     list_for_each_entry_safe(aMailbox, tmp, &mbox_421_list, list){
         if (aMailbox->id == id){
             list_for_each_entry_safe(aMsg, tmpMsg, &aMailbox->msgList.list, list){
 
+                // if we find a message, return error
                 if(counter >= 1){
                     up_write(&lock);
-                    return EPERM;
+                    return -EACCES;
                 }
 
+                counter += 1;
+                // This was code to delete all messages in mailbox
                 // printk("Freeing msgs...\n");
                 // list_del(&aMsg->list);
                 // kfree(aMsg);
@@ -132,16 +143,19 @@ asmlinkage long remove_mbox_421(unsigned long id){
             list_del(&aMailbox->list);
             kfree(aMailbox);
 
+            // return normally
+            up_write(&lock);
+            return 0;
         }
     }
 
-    // return normally
+    // no mailboxes found
     up_write(&lock);
-    return 0;
+    return -ENOENT;
 }
 
-// syscall 379
-// works as intended thus far
+// Syscall 379
+// Returns the number of existing mailboxes.
 asmlinkage long count_mbox_421(void){
     
     struct mbox_421 *aMailbox, *tmp;
@@ -159,16 +173,20 @@ asmlinkage long count_mbox_421(void){
     return count_mboxes;
 }
 
-// syscall 380
-// works but will return 0 if ID not found
+// Syscall 380
+// Returns a list of up to k mailbox IDs in the user-space variable mbxes. 
+// It returns the number of IDs written successfully to mbxes on success and an appropriate error code on failure.
 asmlinkage long list_mbox_421(unsigned long *mbxes, long k){
 
     struct mbox_421 *aMailbox, *tmp;
     long counter = 0;
 
+    if (mbxes == NULL){
+        return -EFAULT;
+    }
+
     down_read(&lock);
 
-    //printk(KERN_INFO "kernel module unloaded.n");
     printk("Iterating through mailboxes to return up to %ld IDs...\n", k);
     list_for_each_entry_safe(aMailbox, tmp, &mbox_421_list, list){
         if (counter < k){
@@ -179,22 +197,31 @@ asmlinkage long list_mbox_421(unsigned long *mbxes, long k){
 
     
     up_read(&lock);
+
+    // if mailbox found, return success
     if (counter > 0){
         return counter;
     }
 
     // if no mboxes found return error
-    return ENOENT;
+    return -ENOENT;
 }
 
-// syscall 381
-// works as intended thus far
+// Syscall 381
+// Encrypts the message msg (if appropriate), adding it to the already existing mailbox identified.
+// Returns the number of bytes stored (which should be equal to the message length n) on success, and an appropriate error code on failure. 
+// Messages with negative lengths shall be rejected as invalid and cause an appropriate error to be returned.
 asmlinkage long send_msg_421(unsigned long id, unsigned char *msg, long n, unsigned long key) {
     
     struct mbox_421 *aMailbox, *tmp;
     struct msg_421 *aNewMsg;
 
     int strCpyCheck;
+
+    // return buffer error if message is of negative length
+    if (n < 0){
+        return -ENOBUFS;
+    }
 
     down_write(&lock);
 
@@ -206,13 +233,14 @@ asmlinkage long send_msg_421(unsigned long id, unsigned char *msg, long n, unsig
             printk("Saving message into mailbox!\n");
             aNewMsg = (struct msg_421 *)kmalloc(sizeof(*aNewMsg), GFP_KERNEL);
 
+            // create buffer divisible by 4
             if(newN % 4 != 0){
                 leftover = 4 - newN % 4;
                 newN += leftover;
             }
 
             aNewMsg->msg = kmalloc(sizeof(char)*newN, GFP_KERNEL);
-            // aNewMsg->msg = msg;
+            
             strCpyCheck = copy_from_user(aNewMsg->msg, msg, n);
             if (strCpyCheck == -EFAULT){
                 printk("Copying from user space failed!");
@@ -227,9 +255,12 @@ asmlinkage long send_msg_421(unsigned long id, unsigned char *msg, long n, unsig
                 }
             }
 
+            // lifo == 0 then create queue
             if (aMailbox->lifo == 0){
                 list_add_tail(&aNewMsg->list, &aMailbox->msgList.list);
-            } else {
+            } 
+            // otherwise create stack
+            else {
                 list_add(&aNewMsg->list, &aMailbox->msgList.list);
             }
 
@@ -240,16 +271,23 @@ asmlinkage long send_msg_421(unsigned long id, unsigned char *msg, long n, unsig
 
     up_write(&lock);
     // no such mailbox found
-    return ENOENT;
+    return -ENOENT;
     
 }
 
-// syscall 382
-// works as intended
+// Syscall 382
+// Copies up to n characters from the next message in the mailbox id to the user-space buffer msg,
+// decrypting with the specified key (if appropriate), and removes the entire message from the mailbox (even if only part of the message is copied out).
+// Returns the number of bytes successfully copied (which should be the minimum of the length of the message that is stored and n) on success 
+// or an appropriate error code on failure.
 asmlinkage long recv_msg_421(unsigned long id, unsigned char *msg, long n, unsigned long key) {
     struct mbox_421 *aMailbox, *tmp;
     struct msg_421 *aMsg, *tmpMsg;
     int cpyToUserCheck;
+
+    if (n <= 0){
+        return -ENOBUFS;
+    }
 
     down_write(&lock);
 
@@ -267,7 +305,7 @@ asmlinkage long recv_msg_421(unsigned long id, unsigned char *msg, long n, unsig
                 if (cpyToUserCheck == -EFAULT){
                     printk("Copying from kernel space failed!");
                     up_write(&lock);
-                    return EFAULT;
+                    return -EFAULT;
                 }
                 printk("Receiving message... Deleting message... \n");
                 list_del(&aMsg->list);
@@ -278,16 +316,20 @@ asmlinkage long recv_msg_421(unsigned long id, unsigned char *msg, long n, unsig
     }
 
     up_write(&lock);
-    // even if no bytes are returned, return 0 because function exited successfully
-    return 0;
+    // return number of bytes successfully copied, which will be N if we get here
+    return n;
 }
 
-// syscall 383
-// works as intended thus far
+// Syscall 383
+// Performs the same operation as recv_msg_421() without removing the message from the mailbox.
 asmlinkage long peek_msg_421(unsigned long id, unsigned char *msg, long n, unsigned long key) {
     struct mbox_421 *aMailbox, *tmp;
     struct msg_421 *aMsg, *tmpMsg;
     int cpyToUserCheck;
+
+    if (n <= 0){
+        return -ENOBUFS;
+    }
 
     down_read(&lock);
 
@@ -307,7 +349,7 @@ asmlinkage long peek_msg_421(unsigned long id, unsigned char *msg, long n, unsig
                         convertArray(aMsg->msg,key);
                     }
                     up_read(&lock);
-                    return EFAULT;
+                    return -EFAULT;
                 }
                 if(aMailbox->enable_crypt == 1){
                     convertArray(aMsg->msg,key);
@@ -318,12 +360,12 @@ asmlinkage long peek_msg_421(unsigned long id, unsigned char *msg, long n, unsig
     }
     
     up_read(&lock);
-    // even if no bytes are returned, return 0 because function exited successfully
-    return 0;
+    // return number of bytes successfully read, which will be n if we get here
+    return n;
 }
 
-// syscall 384
-// works as intended for now
+// Syscall 384
+// Returns the number of messages in the mailbox id on success or an appropriate error code on failure.
 asmlinkage long count_msg_421(unsigned long id) {
 
     struct mbox_421 *aMailbox, *tmp;
@@ -347,15 +389,15 @@ asmlinkage long count_msg_421(unsigned long id) {
     }
 
     // if no messages found return error
-    return ENOENT;
+    return -ENOENT;
 }
 
-// syscall 385
-// works as intended
+// Syscall 385
+// Returns the lenth of the next message that would be returned by calling recv_msg_421() with the same id value (that is the number of bytes in the next message in the mailbox).
+// If there are no messages in the mailbox, this should return an appropriate error value.
 asmlinkage long len_msg_421(unsigned long id) {
     struct mbox_421 *aMailbox, *tmp;
     struct msg_421 *aMsg, *tmpMsg;
-    //int cpyToUserCheck;
 
     down_read(&lock);
 
@@ -363,8 +405,8 @@ asmlinkage long len_msg_421(unsigned long id) {
     list_for_each_entry_safe(aMailbox, tmp, &mbox_421_list, list){
         if (aMailbox->id == id){
             list_for_each_entry_safe(aMsg, tmpMsg, &aMailbox->msgList.list, list){
-                //msg = "Does this work>";
-                //strncpy(msg, "Lol?", n);
+            
+                
                 up_read(&lock);
                 return strlen(aMsg->msg);
             }
@@ -372,6 +414,6 @@ asmlinkage long len_msg_421(unsigned long id) {
     }
     up_read(&lock);
     // return that there is no message
-    return ENOENT;
+    return -ENOENT;
 }
 
