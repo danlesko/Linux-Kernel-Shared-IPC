@@ -1,3 +1,6 @@
+### Please note:
+This is the entire linux kernel for Debian 4 with an added IPC method. The newly implemented message passing interface that was implemented for Project1 for UMBC's CMSC421 class is found [here](https://github.com/landesko/Linux-Kernel-Shared-IPC/tree/master/mail421). 
+        
         Linux kernel release 4.x <http://kernel.org/>
 
 These are the release notes for Linux version 4.  Read them carefully,
